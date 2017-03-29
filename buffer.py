@@ -4,14 +4,17 @@ import math
 import PIL
 from PIL import Image, ImageFilter, ImageChops, ImageEnhance
 import pygame
+import time
 
 
 BACKGROUND = (20, 20, 20)
-DISPLAY_HEIGHT = 1024
-DISPLAY_WIDTH = 1280
-CANVAS_HEIGHT = 640
-CANVAS_WIDTH = 480
-
+DISPLAY_HEIGHT = 480
+DISPLAY_WIDTH = 640
+CANVAS_HEIGHT = 480
+CANVAS_WIDTH = 640
+STATE_GET_FRAME = 0
+STATE_TRANSITION = 1
+TRANSITION_TIME = 3.0
 
 _images = [
     r'images/0.jpeg',
@@ -20,33 +23,13 @@ _images = [
     r'images/3.jpg'
 ]
 
-_output_surface = None
-
-
-def _sobel(img):
-    #if img.mode != "RGB":
-    #    img = img.convert("RGB")
-    out_image = Image.new(img.mode, img.size, None)
-    imgdata = img.load()
-    outdata = out_image.load()
-
-    gx = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]
-    gy = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]
-
-    for row in xrange(1, img.size[0]-1):
-        for col in xrange(1, img.size[1]-1):
-            pixel_gx = pixel_gy = 0
-            #pxval = sum(imgdata[row, col])/3
-            for i in range(-1, 2):
-                for j in range(-1, 2):
-                    val = sum(imgdata[row+i, col+j])/3
-                    pixel_gx += gx[i+1][j+1] * val
-                    pixel_gy += gy[i+1][j+1] * val
-            newpixel = math.hypot(pixel_gx, pixel_gy)
-            newpixel = 255 - int(newpixel)
-            #newpixel = int(newpixel)
-            outdata[row, col] = (newpixel, newpixel, newpixel)
-    return out_image
+_canvas = None
+_current_frame = None
+_frames = []
+_last_transition_time = 0
+_previous_frame = None
+_transition_state = STATE_GET_FRAME
+_transition_time = None
 
 
 def _load_image(slot):
@@ -65,11 +48,11 @@ def _load_image(slot):
     new_width = None
     new_height = None
 
-    if image.size[0] >= _output_surface.get_width():
-        new_width = _output_surface.get_width() - 10
+    if image.size[0] >= _canvas.size[0]:
+        new_width = _canvas.size[0] - 10
 
-    if image.size[1] >= _output_surface.get_height():
-        new_height = _output_surface.get_height() - 10
+    if image.size[1] >= _canvas.size[1]:
+        new_height = _canvas.size[1] - 10
 
     if new_height or new_width:
         if not new_width:
@@ -89,28 +72,63 @@ def _load_image(slot):
 
     image.putalpha(150)
 
-    size = image.size
-    mode = image.mode
-    data = image.tobytes()
-    image = pygame.image.fromstring(data, size, mode)
+    x = (_canvas.size[0] - image.size[0]) / 2
+    y = (_canvas.size[1] - image.size[1]) / 2
+    _canvas.paste(image, (x, y))
 
-    x = (_output_surface.get_width() - size[0]) / 2
-    y = (_output_surface.get_height() - size[1]) / 2
-    #_output_surface.fill((BACKGROUND))
-    _output_surface.blit(image, (x, y))
+    size = _canvas.size
+    mode = _canvas.mode
+    data = _canvas.tobytes()
+    image = pygame.image.fromstring(data, size, mode)
+    _frames.append(image)
 
 
 def _on_frame(screen):
     """ Update the screen. """
-    global _output_surface
-    #screen.blit(_output_surface, (0, 0))
-    screen = pygame.display.get_surface()
-    pygame.transform.scale(_output_surface, (DISPLAY_WIDTH, DISPLAY_HEIGHT), screen)
+
+    global _current_frame
+    global _last_transition_time
+    global _previous_frame
+    global _transition_state
+    global _transition_time
+
+    now = time.time()
+
+    if _transition_state == STATE_GET_FRAME:
+        if len(_frames) > 0:
+            frame = _frames.pop()
+            _previous_frame = _current_frame
+            _current_frame = frame
+            _transition_state = STATE_TRANSITION
+            _transition_time = time.time()
+        elif _current_frame:
+            screen.fill(BACKGROUND)
+            _current_frame.set_alpha(255)
+            screen.blit(_current_frame, (0, 0))
+
+    elif _transition_state == STATE_TRANSITION:
+
+        _transition_time = now - _last_transition_time
+
+        if _transition_time > TRANSITION_TIME:
+            _transition_state = STATE_GET_FRAME
+            screen.fill(BACKGROUND)
+            _current_frame.set_alpha(255)
+            screen.blit(_current_frame, (0, 0))
+        else:
+            last_frame_alpha = 255 * (1.0 - (1.0 * _transition_time / TRANSITION_TIME))
+            last_frame_alpha = min(255, last_frame_alpha)
+            current_frame_alpha = 255 * (1.0 * _transition_time / TRANSITION_TIME)
+            current_frame_alpha = min(255, current_frame_alpha)
+            _previous_frame.set_alpha(last_frame_alpha)
+            _current_frame.set_alpha(current_frame_alpha)
+            screen.blit(_previous_frame, (0, 0))
+            screen.blit(_current_frame, (0, 0))
 
 
 def _main():
 
-    global _output_surface
+    global _canvas
 
     pygame.init()
     clock = pygame.time.Clock()
@@ -118,8 +136,7 @@ def _main():
     screen = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT), 0)
     screen.fill(BACKGROUND)
 
-    _output_surface = pygame.Surface((CANVAS_WIDTH, CANVAS_HEIGHT))
-    _output_surface.fill((BACKGROUND))
+    _canvas = Image.new('RGBA', (CANVAS_WIDTH, CANVAS_HEIGHT))
 
     running = True
     while running:
@@ -140,7 +157,6 @@ def _main():
 
         # Update the display.
         _on_frame(screen)
-
         pygame.display.flip()
         clock.tick(30)
 
