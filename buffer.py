@@ -99,8 +99,10 @@ def _on_frame(screen):
             frame = _frames.pop()
             _previous_frame = _current_frame
             _current_frame = frame
-            _transition_state = STATE_TRANSITION
-            _transition_time = time.time()
+            if _previous_frame:
+                _transition_state = STATE_TRANSITION
+                _last_transition_time = time.time()
+                logging.info('new state %d', _transition_state)
         elif _current_frame:
             screen.fill(BACKGROUND)
             _current_frame.set_alpha(255)
@@ -115,12 +117,13 @@ def _on_frame(screen):
             screen.fill(BACKGROUND)
             _current_frame.set_alpha(255)
             screen.blit(_current_frame, (0, 0))
+            logging.info('new state %d', _transition_state)
         else:
-            last_frame_alpha = 255 * (1.0 - (1.0 * _transition_time / TRANSITION_TIME))
-            last_frame_alpha = min(255, last_frame_alpha)
+            prev_frame_alpha = 255 * (1.0 - (1.0 * _transition_time / TRANSITION_TIME))
+            prev_frame_alpha = min(255, prev_frame_alpha)
             current_frame_alpha = 255 * (1.0 * _transition_time / TRANSITION_TIME)
             current_frame_alpha = min(255, current_frame_alpha)
-            _previous_frame.set_alpha(last_frame_alpha)
+            _previous_frame.set_alpha(prev_frame_alpha)
             _current_frame.set_alpha(current_frame_alpha)
             screen.blit(_previous_frame, (0, 0))
             screen.blit(_current_frame, (0, 0))
@@ -137,6 +140,7 @@ def _main():
     screen.fill(BACKGROUND)
 
     _canvas = Image.new('RGBA', (CANVAS_WIDTH, CANVAS_HEIGHT))
+    _canvas.putalpha(255)
 
     running = True
     while running:
