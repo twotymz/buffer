@@ -67,9 +67,9 @@ def _load_image(slot):
     #image = enhancer.enhance(2.0)
 
     # Apply saturation boost.
-    enhancer = ImageEnhance.Color(image)
-    image = enhancer.enhance(-1.0)
-    image.putalpha(150)
+    #enhancer = ImageEnhance.Color(image)
+    #image = enhancer.enhance(-1.0)
+    #image.putalpha(150)
 
     x = (_canvas.size[0] - image.size[0]) / 2
     y = (_canvas.size[1] - image.size[1]) / 2
