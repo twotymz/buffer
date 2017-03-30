@@ -7,7 +7,7 @@ import pygame
 import time
 
 
-BACKGROUND = (20, 20, 20)
+BACKGROUND = (20, 20, 20, 255)
 DISPLAY_HEIGHT = 480
 DISPLAY_WIDTH = 640
 CANVAS_HEIGHT = 480
@@ -39,9 +39,9 @@ def _load_image(slot):
     logging.info('loading image %s', _images[slot])
 
     try:
-        image = Image.open(_images[slot])
-    except:
-        logging.error('failed opening %s', _images[slot])
+        image = Image.open(_images[slot]).convert('RGBA')
+    except Exception, e:
+        logging.error('failed opening %s (%s)', _images[slot], str(e))
         return
 
     # Resize the image if need be.
@@ -63,23 +63,24 @@ def _load_image(slot):
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
     # Apply contrast boost.
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(2.0)
+    #enhancer = ImageEnhance.Contrast(image)
+    #image = enhancer.enhance(2.0)
 
     # Apply saturation boost.
     enhancer = ImageEnhance.Color(image)
-    image = enhancer.enhance(1.5)
-
+    image = enhancer.enhance(-1.0)
     image.putalpha(150)
 
     x = (_canvas.size[0] - image.size[0]) / 2
     y = (_canvas.size[1] - image.size[1]) / 2
-    _canvas.paste(image, (x, y))
+    #_canvas.paste(BACKGROUND, (0, 0, _canvas.size[0], _canvas.size[1]))
+    _canvas.paste(image, (x, y), image)
 
     size = _canvas.size
     mode = _canvas.mode
     data = _canvas.tobytes()
-    image = pygame.image.fromstring(data, size, mode)
+    image = pygame.image.fromstring(data, size, mode).convert()
+    image = pygame.transform.scale(image, (DISPLAY_WIDTH, DISPLAY_HEIGHT))
     _frames.append(image)
 
 
