@@ -7,7 +7,7 @@ import pygame
 import time
 
 
-BACKGROUND = (20, 20, 20, 255)
+BACKGROUND = (20, 20, 20)
 DISPLAY_HEIGHT = 480
 DISPLAY_WIDTH = 640
 CANVAS_HEIGHT = 480
@@ -15,6 +15,8 @@ CANVAS_WIDTH = 640
 STATE_GET_FRAME = 0
 STATE_TRANSITION = 1
 TRANSITION_TIME = 3.0
+FLAG_CONTRAST = 1 << 0
+FLAG_SATURATION = 1 << 1
 
 _images = [
     r'images/0.jpeg',
@@ -25,6 +27,7 @@ _images = [
 
 _canvas = None
 _current_frame = None
+_flags = 0
 _frames = []
 _last_transition_time = 0
 _previous_frame = None
@@ -49,10 +52,10 @@ def _load_image(slot):
     new_height = None
 
     if image.size[0] >= _canvas.size[0]:
-        new_width = _canvas.size[0] - 10
+        new_width = _canvas.size[0] - 40
 
     if image.size[1] >= _canvas.size[1]:
-        new_height = _canvas.size[1] - 10
+        new_height = _canvas.size[1] - 40
 
     if new_height or new_width:
         if not new_width:
@@ -62,23 +65,54 @@ def _load_image(slot):
         logging.info('resizing image to %dx%d', new_width, new_height)
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
+    x_val = (_canvas.size[0] - image.size[0]) / 2
+    y_val = (_canvas.size[1] - image.size[1]) / 2
+    image.putalpha(150)
+    _canvas.paste(image, (x_val, y_val), image)
+
+    _generate_frame()
+
+
+def _clear():
+    """ Clear the canvas. """
+    background_color = (
+        BACKGROUND[0],
+        BACKGROUND[1],
+        BACKGROUND[2],
+        0
+    )
+    _canvas.paste(background_color, None)
+    _generate_frame()
+
+
+def _generate_frame():
+    """ Generate a new frame. """
+
+    foreground = _canvas.copy()
+
     # Apply contrast boost.
-    #enhancer = ImageEnhance.Contrast(image)
-    #image = enhancer.enhance(2.0)
+    if _flags & FLAG_CONTRAST:
+        enhancer = ImageEnhance.Contrast(foreground)
+        foreground = enhancer.enhance(2.0)
 
     # Apply saturation boost.
-    #enhancer = ImageEnhance.Color(image)
-    #image = enhancer.enhance(-1.0)
-    #image.putalpha(150)
+    if _flags & FLAG_SATURATION:
+        enhancer = ImageEnhance.Color(foreground)
+        foreground = enhancer.enhance(2.0)
 
-    x = (_canvas.size[0] - image.size[0]) / 2
-    y = (_canvas.size[1] - image.size[1]) / 2
-    #_canvas.paste(BACKGROUND, (0, 0, _canvas.size[0], _canvas.size[1]))
-    _canvas.paste(image, (x, y), image)
+    background_color = (
+        BACKGROUND[0],
+        BACKGROUND[1],
+        BACKGROUND[2],
+        255
+    )
 
-    size = _canvas.size
-    mode = _canvas.mode
-    data = _canvas.tobytes()
+    background = Image.new('RGBA', (CANVAS_WIDTH, CANVAS_HEIGHT), background_color)
+    background.paste(foreground, (0, 0), foreground)
+
+    size = background.size
+    mode = background.mode
+    data = background.tobytes()
     image = pygame.image.fromstring(data, size, mode).convert()
     image = pygame.transform.scale(image, (DISPLAY_WIDTH, DISPLAY_HEIGHT))
     _frames.append(image)
@@ -133,6 +167,7 @@ def _on_frame(screen):
 def _main():
 
     global _canvas
+    global _flags
 
     pygame.init()
     clock = pygame.time.Clock()
@@ -140,8 +175,14 @@ def _main():
     screen = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT), 0)
     screen.fill(BACKGROUND)
 
-    _canvas = Image.new('RGBA', (CANVAS_WIDTH, CANVAS_HEIGHT))
-    _canvas.putalpha(255)
+    background_color = (
+        BACKGROUND[0],
+        BACKGROUND[1],
+        BACKGROUND[2],
+        0
+    )
+
+    _canvas = Image.new('RGBA', (CANVAS_WIDTH, CANVAS_HEIGHT), background_color)
 
     running = True
     while running:
@@ -159,6 +200,17 @@ def _main():
                     _load_image(2)
                 elif event.key == pygame.K_4:
                     _load_image(3)
+                elif event.key == pygame.K_c:
+                    if pygame.key.get_mods() & pygame.KMOD_CTRL:
+                        _clear()
+                    else:
+                        _flags = _flags ^ FLAG_CONTRAST
+                        logging.info('flags is %X', _flags)
+                        _generate_frame()
+                elif event.key == pygame.K_s:
+                    _flags = _flags ^ FLAG_SATURATION
+                    logging.info('flags is %X', _flags)
+                    _generate_frame()
 
         # Update the display.
         _on_frame(screen)
