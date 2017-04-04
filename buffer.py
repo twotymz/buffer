@@ -74,6 +74,9 @@ def _load_image(slot):
 
 
 def _clear():
+
+    global _canvas
+
     """ Clear the canvas. """
     background_color = (
         BACKGROUND[0],
@@ -81,7 +84,7 @@ def _clear():
         BACKGROUND[2],
         0
     )
-    _canvas.paste(background_color, None)
+    _canvas.paste(background_color, (0, 0, _canvas.size[0], _canvas.size[1]))
     _generate_frame()
 
 
