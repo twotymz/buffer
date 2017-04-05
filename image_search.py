@@ -14,6 +14,7 @@ class Picture(object):
         self.image = image
         self.median = ImageStat.Stat(image).median
 
+
 def color_difference(a, b):
 
     r = b.median[0] - a.median[0]
@@ -25,33 +26,31 @@ def color_difference(a, b):
 
 if __name__ == '__main__':
 
-    images = []
+    input_images = []
     scene_images = []
 
+    # Load input images in to "input_images".
     for f in listdir(IMAGE_DIR):
         path = join(IMAGE_DIR, f)
         if isfile(path):
             image = Image.open(path).convert('RGBA')
-            images.append(Picture(path, image))
+            input_images.append(Picture(path, image))
 
-    while len(images) > 0:
+    # Evaluate each input image against the images in the scene to figure
+    # out the placement of the input image.
+    while len(input_images) > 0:
 
-        input_image = images.pop(0)
+        input_image = input_images.pop(0)
 
         if len(scene_images) == 0:
             scene_images.append(input_image)
             continue
 
         tree = vpt.VP_tree(scene_images, color_difference)
-        results = tree.find(input_image)
-
-        print input_image.path
-        n = 0
-        for r in results:
-            print '% 5d %s' % (r[1], r[0].path)
-            n += 1
-            if n >= 5:
+        results = []
+        for r in tree.find(input_image):
+            results.append(r)
+            if len(results) == 3:
                 break
-        print '-' * 20
 
         scene_images.append(input_image)
