@@ -1,10 +1,14 @@
 
 import logging
 import math
+from os import listdir
+from os.path import isfile, join
 import PIL
-from PIL import Image, ImageFilter, ImageChops, ImageEnhance
+from PIL import Image, ImageDraw, ImageFilter, ImageChops, ImageEnhance, ImageStat
 import pygame
 import time
+
+import vpt
 
 
 BACKGROUND = (20, 20, 20)
@@ -17,35 +21,54 @@ STATE_TRANSITION = 1
 TRANSITION_TIME = 3.0
 FLAG_CONTRAST = 1 << 0
 FLAG_SATURATION = 1 << 1
+IMAGE_DIR = 'images'
 
-_images = [
-    r'images/0.jpeg',
-    r'images/1.jpg',
-    r'images/2.jpg',
-    r'images/3.jpg'
-]
 
 _canvas = None
 _current_frame = None
 _flags = 0
 _frames = []
+_input_images = []
 _last_transition_time = 0
 _previous_frame = None
+_scene_images = []
 _transition_state = STATE_GET_FRAME
 _transition_time = None
 
 
-def _load_image(slot):
-    """ Load the image in the specified slot, process it, and update the
-    output surface.
-    """
-    logging.info('loading image %s', _images[slot])
+class Picture(object):
+    def __init__(self, path, image):
+        self.path = path
+        self.image = image
+        self.median = ImageStat.Stat(image).median
+        self.xy = [0, 0]
 
-    try:
-        image = Image.open(_images[slot]).convert('RGBA')
-    except Exception, e:
-        logging.error('failed opening %s (%s)', _images[slot], str(e))
+
+def _color_difference(a, b):
+    r = b.median[0] - a.median[0]
+    g = b.median[1] - a.median[1]
+    b = b.median[2] - b.median[2]
+    return math.sqrt(r * r + g * g + b * b)
+
+
+def _load_image():
+
+    global _input_images
+    global _scene_images
+
+    if len(_input_images) == 0:
         return
+
+    pic = _input_images.pop(0)
+    image = pic.image
+    logging.info('loading image %s', pic.path)
+
+    tree = vpt.VP_tree(_scene_images, _color_difference)
+    results = []
+    for r in tree.find(pic):
+        results.append(r)
+        if len(results) == 3:
+            break
 
     # Resize the image if need be.
     new_width = None
@@ -65,12 +88,25 @@ def _load_image(slot):
         logging.info('resizing image to %dx%d', new_width, new_height)
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
+    # x_val, y_val is the upper left hand corner of the image.
     x_val = (_canvas.size[0] - image.size[0]) / 2
     y_val = (_canvas.size[1] - image.size[1]) / 2
-    image.putalpha(150)
-    _canvas.paste(image, (x_val, y_val), image)
+
+    # place x_val and y_val in to the center of the new image.
+    pic.xy[0] = x_val + image.size[0] / 2
+    pic.xy[1] = y_val + image.size[1] / 2
+
+    # Draw 10 pix wide ellipse
+    bbox = (pic.xy[0] - 5, pic.xy[1] - 5, pic.xy[0] + 5, pic.xy[1] + 5)
+    draw = ImageDraw.Draw(_canvas)
+    draw.ellipse(bbox, (pic.median[0], pic.median[1], pic.median[2], 255))
+    del draw
+
+    #image.putalpha(150)
+    #_canvas.paste(image, (x_val, y_val), image)
 
     _generate_frame()
+    _scene_images.append(pic)
 
 
 def _clear():
@@ -171,6 +207,14 @@ def _main():
 
     global _canvas
     global _flags
+    global _input_images
+
+    # Load input images in to "input_images".
+    for f in listdir(IMAGE_DIR):
+        path = join(IMAGE_DIR, f)
+        if isfile(path):
+            image = Image.open(path).convert('RGBA')
+            _input_images.append(Picture(path, image))
 
     pygame.init()
     clock = pygame.time.Clock()
@@ -195,14 +239,8 @@ def _main():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_1:
-                    _load_image(0)
-                elif event.key == pygame.K_2:
-                    _load_image(1)
-                elif event.key == pygame.K_3:
-                    _load_image(2)
-                elif event.key == pygame.K_4:
-                    _load_image(3)
+                if event.key == pygame.K_SPACE:
+                    _load_image()
                 elif event.key == pygame.K_c:
                     if pygame.key.get_mods() & pygame.KMOD_CTRL:
                         _clear()
