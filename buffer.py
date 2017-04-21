@@ -44,10 +44,10 @@ class Picture(object):
         self.xy = [0, 0]
 
 
-def _color_difference(a, b):
-    r = b.median[0] - a.median[0]
-    g = b.median[1] - a.median[1]
-    b = b.median[2] - b.median[2]
+def _color_difference(x, y):
+    r = y.median[0] - x.median[0]
+    g = y.median[1] - x.median[1]
+    b = y.median[2] - x.median[2]
     return math.sqrt(r * r + g * g + b * b)
 
 
