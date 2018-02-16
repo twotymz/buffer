@@ -88,13 +88,15 @@ def _load_image():
         logging.info('resizing image to %dx%d', new_width, new_height)
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
-    # x_val, y_val is the upper left hand corner of the image.
-    x_val = (_canvas.size[0] - image.size[0]) / 2
-    y_val = (_canvas.size[1] - image.size[1]) / 2
-
-    # place x_val and y_val in to the center of the new image.
-    pic.xy[0] = x_val + image.size[0] / 2
-    pic.xy[1] = y_val + image.size[1] / 2
+    if len(results) == 0:
+        # x_val, y_val is the upper left hand corner of the image.
+        x_val = (_canvas.size[0] - image.size[0]) / 2
+        y_val = (_canvas.size[1] - image.size[1]) / 2
+        # place x_val and y_val in to the center of the new image.
+        pic.xy[0] = x_val + image.size[0] / 2
+        pic.xy[1] = y_val + image.size[1] / 2
+    else:
+        pass
 
     # Draw 10 pix wide ellipse
     bbox = (pic.xy[0] - 5, pic.xy[1] - 5, pic.xy[0] + 5, pic.xy[1] + 5)
