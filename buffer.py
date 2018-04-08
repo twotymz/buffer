@@ -42,6 +42,16 @@ class Picture(object):
         self.xy = [0, 0]
 
 
+<<<<<<< HEAD
+=======
+def _color_difference(x, y):
+    r = y.median[0] - x.median[0]
+    g = y.median[1] - x.median[1]
+    b = y.median[2] - x.median[2]
+    return math.sqrt(r * r + g * g + b * b)
+
+
+>>>>>>> 2478bad719109d2b2283b39f2150031db8d37d76
 def _load_image():
 
     global _input_images
@@ -72,13 +82,15 @@ def _load_image():
         logging.info('resizing image to %dx%d', new_width, new_height)
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
-    # x_val, y_val is the upper left hand corner of the image.
-    x_val = (_canvas.size[0] - image.size[0]) / 2
-    y_val = (_canvas.size[1] - image.size[1]) / 2
-
-    # place x_val and y_val in to the center of the new image.
-    pic.xy[0] = x_val + image.size[0] / 2
-    pic.xy[1] = y_val + image.size[1] / 2
+    if len(results) == 0:
+        # x_val, y_val is the upper left hand corner of the image.
+        x_val = (_canvas.size[0] - image.size[0]) / 2
+        y_val = (_canvas.size[1] - image.size[1]) / 2
+        # place x_val and y_val in to the center of the new image.
+        pic.xy[0] = x_val + image.size[0] / 2
+        pic.xy[1] = y_val + image.size[1] / 2
+    else:
+        pass
 
     image.putalpha(255)
     _canvas.paste(image, (x_val, y_val), image)
