@@ -8,14 +8,12 @@ from PIL import Image, ImageDraw, ImageFilter, ImageChops, ImageEnhance, ImageSt
 import pygame
 import time
 
-import vpt
-
 
 BACKGROUND = (20, 20, 20)
 DISPLAY_HEIGHT = 480
 DISPLAY_WIDTH = 640
-CANVAS_HEIGHT = 480
-CANVAS_WIDTH = 640
+CANVAS_HEIGHT = 1024
+CANVAS_WIDTH = 1280
 STATE_GET_FRAME = 0
 STATE_TRANSITION = 1
 TRANSITION_TIME = 3.0
@@ -44,13 +42,6 @@ class Picture(object):
         self.xy = [0, 0]
 
 
-def _color_difference(a, b):
-    r = b.median[0] - a.median[0]
-    g = b.median[1] - a.median[1]
-    b = b.median[2] - b.median[2]
-    return math.sqrt(r * r + g * g + b * b)
-
-
 def _load_image():
 
     global _input_images
@@ -62,13 +53,6 @@ def _load_image():
     pic = _input_images.pop(0)
     image = pic.image
     logging.info('loading image %s', pic.path)
-
-    tree = vpt.VP_tree(_scene_images, _color_difference)
-    results = []
-    for r in tree.find(pic):
-        results.append(r)
-        if len(results) == 3:
-            break
 
     # Resize the image if need be.
     new_width = None
@@ -96,14 +80,8 @@ def _load_image():
     pic.xy[0] = x_val + image.size[0] / 2
     pic.xy[1] = y_val + image.size[1] / 2
 
-    # Draw 10 pix wide ellipse
-    bbox = (pic.xy[0] - 5, pic.xy[1] - 5, pic.xy[0] + 5, pic.xy[1] + 5)
-    draw = ImageDraw.Draw(_canvas)
-    draw.ellipse(bbox, (pic.median[0], pic.median[1], pic.median[2], 255))
-    del draw
-
-    #image.putalpha(150)
-    #_canvas.paste(image, (x_val, y_val), image)
+    image.putalpha(255)
+    _canvas.paste(image, (x_val, y_val), image)
 
     _generate_frame()
     _scene_images.append(pic)
@@ -215,6 +193,7 @@ def _main():
         if isfile(path):
             image = Image.open(path).convert('RGBA')
             _input_images.append(Picture(path, image))
+            logging.info('added {}'.format(path))
 
     pygame.init()
     clock = pygame.time.Clock()
