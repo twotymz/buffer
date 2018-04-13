@@ -38,20 +38,26 @@ class Picture(object):
     def __init__(self, path, image):
         self.path = path
         self.image = image
-        self.median = ImageStat.Stat(image).median
+        self.left_color = None
+        self.right_color = None
+        self.top_color = None
+        self.bottom_color = None
         self.xy = [0, 0]
 
 
-<<<<<<< HEAD
-=======
-def _color_difference(x, y):
-    r = y.median[0] - x.median[0]
-    g = y.median[1] - x.median[1]
-    b = y.median[2] - x.median[2]
-    return math.sqrt(r * r + g * g + b * b)
+def _get_avg_color(im, x, y, w, h):
+    crop = im.crop((x, y, x+w, y+h))
+    return ImageStat.Stat(crop).mean
 
 
->>>>>>> 2478bad719109d2b2283b39f2150031db8d37d76
+def _position_image(image):
+    global _scene_images
+
+    for input_image in _scene_images:
+        top_dist = sqrt(
+            (image.top_color[0] - input_image.top_color[0]) )
+
+
 def _load_image():
 
     global _input_images
@@ -60,8 +66,21 @@ def _load_image():
     if len(_input_images) == 0:
         return
 
+    logging.info('-' * 20)
+
     pic = _input_images.pop(0)
     image = pic.image
+
+    # Apply contrast boost.
+    if _flags & FLAG_CONTRAST:
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(2.0)
+
+    # Apply saturation boost.
+    if _flags & FLAG_SATURATION:
+        enhancer = ImageEnhance.Color(image)
+        image = enhancer.enhance(2.0)
+
     logging.info('loading image %s', pic.path)
 
     # Resize the image if need be.
@@ -82,15 +101,30 @@ def _load_image():
         logging.info('resizing image to %dx%d', new_width, new_height)
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
-    if len(results) == 0:
-        # x_val, y_val is the upper left hand corner of the image.
-        x_val = (_canvas.size[0] - image.size[0]) / 2
-        y_val = (_canvas.size[1] - image.size[1]) / 2
-        # place x_val and y_val in to the center of the new image.
-        pic.xy[0] = x_val + image.size[0] / 2
-        pic.xy[1] = y_val + image.size[1] / 2
-    else:
-        pass
+    pic.left_color = _get_avg_color(image, 0, 0, image.size[0] / 2, image.size[1])
+    pic.right_color = _get_avg_color(image, image.size[0] / 2, 0, image.size[0] / 2, image.size[1])
+    pic.top_color = _get_avg_color(image, 0, 0, image.size[0], image.size[1] / 2)
+    pic.bottom_color = _get_avg_color(image, 0, image.size[1] / 2, image.size[0],  image.size[1] / 2)
+
+    logging.info(
+        'left {:.0f}, {:.0f}, {:.0f}'.format(pic.left_color[0], pic.left_color[1], pic.left_color[2])
+    )
+    logging.info(
+        'right {:.0f}, {:.0f}, {:.0f}'.format(pic.right_color[0], pic.right_color[1], pic.right_color[2])
+    )
+    logging.info(
+        'top {:.0f}, {:.0f}, {:.0f}'.format(pic.top_color[0], pic.top_color[1], pic.top_color[2])
+    )
+    logging.info(
+        'bottom {:.0f}, {:.0f}, {:.0f}'.format(pic.bottom_color[0], pic.bottom_color[1], pic.bottom_color[2])
+    )
+
+    # x_val, y_val is the upper left hand corner of the image.
+    x_val = (_canvas.size[0] - image.size[0]) / 2
+    y_val = (_canvas.size[1] - image.size[1]) / 2
+    # place x_val and y_val in to the center of the new image.
+    pic.xy[0] = x_val + image.size[0] / 2
+    pic.xy[1] = y_val + image.size[1] / 2
 
     image.putalpha(255)
     _canvas.paste(image, (x_val, y_val), image)
@@ -119,15 +153,7 @@ def _generate_frame():
 
     foreground = _canvas.copy()
 
-    # Apply contrast boost.
-    if _flags & FLAG_CONTRAST:
-        enhancer = ImageEnhance.Contrast(foreground)
-        foreground = enhancer.enhance(2.0)
 
-    # Apply saturation boost.
-    if _flags & FLAG_SATURATION:
-        enhancer = ImageEnhance.Color(foreground)
-        foreground = enhancer.enhance(2.0)
 
     background_color = (
         BACKGROUND[0],
