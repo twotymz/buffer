@@ -29,7 +29,7 @@ _frames = []
 _input_images = []
 _last_transition_time = 0
 _previous_frame = None
-_scene_images = []
+_scene_pics = []
 _transition_state = STATE_GET_FRAME
 _transition_time = None
 
@@ -42,7 +42,10 @@ class Picture(object):
         self.right_color = None
         self.top_color = None
         self.bottom_color = None
-        self.xy = [0, 0]
+        self.x = None
+        self.y = None
+        self.height = None
+        self.width = None
 
 
 def _get_avg_color(im, x, y, w, h):
@@ -50,18 +53,82 @@ def _get_avg_color(im, x, y, w, h):
     return ImageStat.Stat(crop).mean
 
 
-def _position_image(image):
-    global _scene_images
+def _test_side(rect):
 
-    for input_image in _scene_images:
-        top_dist = sqrt(
-            (image.top_color[0] - input_image.top_color[0]) )
+    global _scene_pics
+
+    for sp in _scene_pics:
+        spr = pygame.Rect(sp.x, sp.y, sp.width, sp.height)
+        if rect.colliderect(spr):
+
+            area =
+
+            return True
+
+    return False, None
+
+
+def _position_image(pic):
+    global _scene_pics, _canvas
+
+    if len(_scene_pics) == 0:
+
+        x_val = (_canvas.size[0] - pic.width) / 2
+        y_val = (_canvas.size[1] - pic.height) / 2
+        return x_val, y_val
+
+    else:
+
+        smallest_area = 999999
+        winning_rect = None
+
+        for sp in _scene_pics:
+
+            # Test the top...
+            r = pygame.Rect(sp.x, sp.y - pic.height, pic.width, pic.height)
+            collision, area = _test_side(r)
+            if not collision:
+                return r.x, r.y
+            else:
+                if area < smallest_area:
+                    winning_rect = rect
+
+            # Test the left...
+            r = pygame.Rect(sp.x - pic.width, sp.y, pic.width, pic.height)
+            collision, area = _test_side(r)
+            if not collision:
+                return r.x, r.y
+            else:
+                if area < smallest_area:
+                    winning_rect = rect
+
+            # Test the right...
+            r = pygame.Rect(sp.x + sp.width, sp.y, pic.width, pic.height)
+            collision, area = _test_side(r)
+            if not collision:
+                return r.x, r.y
+            else:
+                if area < smallest_area:
+                    winning_rect = rect
+
+            # Test the bottom...
+            r = pygame.Rect(sp.x, sp.y + sp.height, pic.width, pic.height)
+            collision, area = _test_side(r)
+            if not collision:
+                return r.x, r.y
+            else:
+                if area < smallest_area:
+                    winning_rect = rect
+
+        return winning_rect.x, winning_rect.y
+
+    return 0, 0
 
 
 def _load_image():
 
     global _input_images
-    global _scene_images
+    global _scene_pics
 
     if len(_input_images) == 0:
         return
@@ -101,11 +168,17 @@ def _load_image():
         logging.info('resizing image to %dx%d', new_width, new_height)
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
-    pic.left_color = _get_avg_color(image, 0, 0, image.size[0] / 2, image.size[1])
-    pic.right_color = _get_avg_color(image, image.size[0] / 2, 0, image.size[0] / 2, image.size[1])
-    pic.top_color = _get_avg_color(image, 0, 0, image.size[0], image.size[1] / 2)
-    pic.bottom_color = _get_avg_color(image, 0, image.size[1] / 2, image.size[0],  image.size[1] / 2)
+    pic.width = image.size[0]
+    pic.height = image.size[1]
 
+    logging.info('{} x {}'.format(pic.width, pic.height))
+
+    #pic.left_color = _get_avg_color(image, 0, 0, image.size[0] / 2, image.size[1])
+    #pic.right_color = _get_avg_color(image, image.size[0] / 2, 0, image.size[0] / 2, image.size[1])
+    #pic.top_color = _get_avg_color(image, 0, 0, image.size[0], image.size[1] / 2)
+    #pic.bottom_color = _get_avg_color(image, 0, image.size[1] / 2, image.size[0],  image.size[1] / 2)
+
+    '''
     logging.info(
         'left {:.0f}, {:.0f}, {:.0f}'.format(pic.left_color[0], pic.left_color[1], pic.left_color[2])
     )
@@ -118,19 +191,22 @@ def _load_image():
     logging.info(
         'bottom {:.0f}, {:.0f}, {:.0f}'.format(pic.bottom_color[0], pic.bottom_color[1], pic.bottom_color[2])
     )
+    '''
+
+    pic.x, pic.y = _position_image(pic)
 
     # x_val, y_val is the upper left hand corner of the image.
-    x_val = (_canvas.size[0] - image.size[0]) / 2
-    y_val = (_canvas.size[1] - image.size[1]) / 2
+    #x_val = (_canvas.size[0] - image.size[0]) / 2
+    #y_val = (_canvas.size[1] - image.size[1]) / 2
     # place x_val and y_val in to the center of the new image.
-    pic.xy[0] = x_val + image.size[0] / 2
-    pic.xy[1] = y_val + image.size[1] / 2
+    #pic.xy[0] = x_val + image.size[0] / 2
+    #pic.xy[1] = y_val + image.size[1] / 2
 
     image.putalpha(255)
-    _canvas.paste(image, (x_val, y_val), image)
+    _canvas.paste(image, (pic.x, pic.y), image)
 
     _generate_frame()
-    _scene_images.append(pic)
+    _scene_pics .append(pic)
 
 
 def _clear():
@@ -152,8 +228,6 @@ def _generate_frame():
     """ Generate a new frame. """
 
     foreground = _canvas.copy()
-
-
 
     background_color = (
         BACKGROUND[0],
