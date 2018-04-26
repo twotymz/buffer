@@ -53,19 +53,27 @@ def _get_avg_color(im, x, y, w, h):
     return ImageStat.Stat(crop).mean
 
 
-def _test_side(rect):
+def _test_rect(rect):
 
     global _scene_pics
 
+    smallest_area = 999999
+
     for sp in _scene_pics:
         spr = pygame.Rect(sp.x, sp.y, sp.width, sp.height)
+
+        logging.info('testing against {}, {}'.format(sp.path, str(spr)))
+        logging.info('=' * 40)
+
         if rect.colliderect(spr):
+            intersection = rect.clip(spr)
+            area = (intersection.right - intersection.left) * (intersection.bottom - intersection.top)
+            if area < smallest_area:
+                smallest_area = area
+        else:
+            return False, None
 
-            area =
-
-            return True
-
-    return False, None
+    return True, smallest_area
 
 
 def _position_image(pic):
@@ -81,44 +89,63 @@ def _position_image(pic):
 
         smallest_area = 999999
         winning_rect = None
+        canvas_rect = pygame.Rect(0, 0, _canvas.size[0], _canvas.size[1])
 
         for sp in _scene_pics:
 
+            logging.info('current pic {}'.format(sp.path))
+
             # Test the top...
             r = pygame.Rect(sp.x, sp.y - pic.height, pic.width, pic.height)
-            collision, area = _test_side(r)
+            r.clamp_ip(canvas_rect)
+            logging.info('test top {}'.format(str(r)))
+
+            collision, area = _test_rect(r)
             if not collision:
                 return r.x, r.y
             else:
                 if area < smallest_area:
-                    winning_rect = rect
+                    smallest_area = area
+                    winning_rect = r
 
             # Test the left...
             r = pygame.Rect(sp.x - pic.width, sp.y, pic.width, pic.height)
-            collision, area = _test_side(r)
+            r.clamp_ip(canvas_rect)
+            logging.info('test left {}'.format(str(r)))
+
+            collision, area = _test_rect(r)
             if not collision:
                 return r.x, r.y
             else:
                 if area < smallest_area:
-                    winning_rect = rect
+                    smallest_area = area
+                    winning_rect = r
 
             # Test the right...
             r = pygame.Rect(sp.x + sp.width, sp.y, pic.width, pic.height)
-            collision, area = _test_side(r)
+            r.clamp_ip(canvas_rect)
+            logging.info('test right {}'.format(str(r)))
+
+            collision, area = _test_rect(r)
             if not collision:
                 return r.x, r.y
             else:
                 if area < smallest_area:
-                    winning_rect = rect
+                    smallest_area = area
+                    winning_rect = r
 
             # Test the bottom...
             r = pygame.Rect(sp.x, sp.y + sp.height, pic.width, pic.height)
-            collision, area = _test_side(r)
+            r.clamp_ip(canvas_rect)
+            logging.info('test bottom'.format(str(r)))
+
+            collision, area = _test_rect(r)
             if not collision:
                 return r.x, r.y
             else:
                 if area < smallest_area:
-                    winning_rect = rect
+                    smallest_area = area
+                    winning_rect = r
 
         return winning_rect.x, winning_rect.y
 
@@ -148,7 +175,7 @@ def _load_image():
         enhancer = ImageEnhance.Color(image)
         image = enhancer.enhance(2.0)
 
-    logging.info('loading image %s', pic.path)
+    #logging.info('loading image %s', pic.path)
 
     # Resize the image if need be.
     new_width = None
@@ -165,13 +192,11 @@ def _load_image():
             new_width = image.size[0]
         if not new_height:
             new_height = image.size[1]
-        logging.info('resizing image to %dx%d', new_width, new_height)
+        #logging.info('resizing image to %dx%d', new_width, new_height)
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
     pic.width = image.size[0]
     pic.height = image.size[1]
-
-    logging.info('{} x {}'.format(pic.width, pic.height))
 
     #pic.left_color = _get_avg_color(image, 0, 0, image.size[0] / 2, image.size[1])
     #pic.right_color = _get_avg_color(image, image.size[0] / 2, 0, image.size[0] / 2, image.size[1])
@@ -194,6 +219,7 @@ def _load_image():
     '''
 
     pic.x, pic.y = _position_image(pic)
+    logging.info('final position %d, %d', pic.x, pic.y)
 
     # x_val, y_val is the upper left hand corner of the image.
     #x_val = (_canvas.size[0] - image.size[0]) / 2
@@ -203,7 +229,10 @@ def _load_image():
     #pic.xy[1] = y_val + image.size[1] / 2
 
     image.putalpha(255)
-    _canvas.paste(image, (pic.x, pic.y), image)
+    #_canvas.paste(image, (pic.x, pic.y), image)
+
+    d = ImageDraw.Draw(_canvas)
+    d.rectangle([pic.x-1, pic.y-1, pic.x + pic.width - 2, pic.y + pic.height - 2], fill=(255,0,0,255), outline=(0,0,0,255))
 
     _generate_frame()
     _scene_pics .append(pic)
@@ -266,7 +295,7 @@ def _on_frame(screen):
             if _previous_frame:
                 _transition_state = STATE_TRANSITION
                 _last_transition_time = time.time()
-                logging.info('new state %d', _transition_state)
+                #logging.info('new state %d', _transition_state)
         elif _current_frame:
             screen.fill(BACKGROUND)
             _current_frame.set_alpha(255)
@@ -281,7 +310,7 @@ def _on_frame(screen):
             screen.fill(BACKGROUND)
             _current_frame.set_alpha(255)
             screen.blit(_current_frame, (0, 0))
-            logging.info('new state %d', _transition_state)
+            #logging.info('new state %d', _transition_state)
         else:
             prev_frame_alpha = 255 * (1.0 - (1.0 * _transition_time / TRANSITION_TIME))
             prev_frame_alpha = min(255, prev_frame_alpha)
@@ -305,7 +334,7 @@ def _main():
         if isfile(path):
             image = Image.open(path).convert('RGBA')
             _input_images.append(Picture(path, image))
-            logging.info('added {}'.format(path))
+            #logging.info('added {}'.format(path))
 
     pygame.init()
     clock = pygame.time.Clock()
