@@ -1,12 +1,14 @@
-
 import logging
 import math
 import PIL
 from PIL import Image, ImageFilter, ImageChops, ImageEnhance
 import pygame
 import time
+import random
+import os
+import os.path
 
-
+IMAGE_DIR = r'C:\Users\Josh\Desktop\images'
 BACKGROUND = (20, 20, 20)
 DISPLAY_HEIGHT = 480
 DISPLAY_WIDTH = 640
@@ -18,13 +20,7 @@ TRANSITION_TIME = 3.0
 FLAG_CONTRAST = 1 << 0
 FLAG_SATURATION = 1 << 1
 
-_images = [
-    r'images/0.jpeg',
-    r'images/1.jpg',
-    r'images/2.jpg',
-    r'images/3.jpg'
-]
-
+_images = []
 _canvas = None
 _current_frame = None
 _flags = 0
@@ -35,16 +31,25 @@ _transition_state = STATE_GET_FRAME
 _transition_time = None
 
 
-def _load_image(slot):
+def _find_images():
+    global _images
+    for filename in os.listdir(IMAGE_DIR):
+        name, ext = os.path.splitext(filename)
+        if ext == '.jpg':
+            _images.append(os.path.join(IMAGE_DIR, filename))
+
+
+def _load_image():
     """ Load the image in the specified slot, process it, and update the
     output surface.
     """
-    logging.info('loading image %s', _images[slot])
+    image_idx = random.randint(0, len(_images))
+    logging.info('loading image %s', _images[image_idx])
 
     try:
-        image = Image.open(_images[slot]).convert('RGBA')
-    except Exception, e:
-        logging.error('failed opening %s (%s)', _images[slot], str(e))
+        image = Image.open(_images[image_idx]).convert('RGBA')
+    except:
+        logging.error('failed opening %s', _images[image_idx])
         return
 
     # Resize the image if need be.
@@ -65,8 +70,8 @@ def _load_image(slot):
         logging.info('resizing image to %dx%d', new_width, new_height)
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
-    x_val = (_canvas.size[0] - image.size[0]) / 2
-    y_val = (_canvas.size[1] - image.size[1]) / 2
+    x_val = int((_canvas.size[0] - image.size[0]) / 2)
+    y_val = int((_canvas.size[1] - image.size[1]) / 2)
     image.putalpha(150)
     _canvas.paste(image, (x_val, y_val), image)
 
@@ -172,6 +177,8 @@ def _main():
     global _canvas
     global _flags
 
+    _find_images()
+
     pygame.init()
     clock = pygame.time.Clock()
     pygame.display.set_caption('bufer v0')
@@ -196,13 +203,7 @@ def _main():
                 running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_1:
-                    _load_image(0)
-                elif event.key == pygame.K_2:
-                    _load_image(1)
-                elif event.key == pygame.K_3:
-                    _load_image(2)
-                elif event.key == pygame.K_4:
-                    _load_image(3)
+                    _load_image()
                 elif event.key == pygame.K_c:
                     if pygame.key.get_mods() & pygame.KMOD_CTRL:
                         _clear()
