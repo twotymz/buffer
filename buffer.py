@@ -8,18 +8,20 @@ import random
 import os
 import os.path
 
-IMAGE_DIR = r'C:\Users\Josh\Desktop\images'
+IMAGE_DIR = r'.\images2'
 BACKGROUND = (20, 20, 20)
-DISPLAY_HEIGHT = 480
-DISPLAY_WIDTH = 640
-CANVAS_HEIGHT = 480
-CANVAS_WIDTH = 640
+DISPLAY_HEIGHT = 960
+DISPLAY_WIDTH = 1280
+CANVAS_HEIGHT = 960
+CANVAS_WIDTH = 1280
 STATE_GET_FRAME = 0
 STATE_TRANSITION = 1
 TRANSITION_TIME = 3.0
 FLAG_CONTRAST = 1 << 0
 FLAG_SATURATION = 1 << 1
+FLAG_BLEND = 1 << 2
 
+_num_frames = 0
 _images = []
 _canvas = None
 _current_frame = None
@@ -43,7 +45,11 @@ def _load_image():
     """ Load the image in the specified slot, process it, and update the
     output surface.
     """
-    image_idx = random.randint(0, len(_images))
+
+    global _canvas, _num_frames, _flags
+
+    #image_idx = random.randint(0, len(_images) - 1)
+    image_idx = _num_frames % len(_images)
     logging.info('loading image %s', _images[image_idx])
 
     try:
@@ -72,8 +78,15 @@ def _load_image():
 
     x_val = int((_canvas.size[0] - image.size[0]) / 2)
     y_val = int((_canvas.size[1] - image.size[1]) / 2)
-    image.putalpha(150)
-    _canvas.paste(image, (x_val, y_val), image)
+
+    if _flags & FLAG_BLEND:
+        alpha = 0.64
+        copy_of_canvas = _canvas.copy()
+        _canvas.paste(image, (x_val, y_val), image)
+        _canvas = Image.blend(_canvas, copy_of_canvas, alpha)
+    else:
+        image.putalpha(150)
+        _canvas.paste(image, (x_val, y_val), image)
 
     _generate_frame()
 
@@ -95,6 +108,10 @@ def _clear():
 
 def _generate_frame():
     """ Generate a new frame. """
+    global _num_frames
+
+    _num_frames += 1
+    logging.info('num_frames = {}'.format(_num_frames))
 
     foreground = _canvas.copy()
 
@@ -215,6 +232,9 @@ def _main():
                     _flags = _flags ^ FLAG_SATURATION
                     logging.info('flags is %X', _flags)
                     _generate_frame()
+                elif event.key == pygame.K_f:
+                    _flags = _flags ^ FLAG_BLEND
+                    logging.info('flags is %X', _flags)
 
         # Update the display.
         _on_frame(screen)
