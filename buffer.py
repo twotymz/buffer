@@ -1,7 +1,7 @@
 import logging
 import math
 import PIL
-from PIL import Image, ImageFilter, ImageChops, ImageEnhance
+from PIL import Image, ImageEnhance, ImageStat
 import pygame
 import time
 import random
@@ -16,10 +16,10 @@ CANVAS_HEIGHT = 960
 CANVAS_WIDTH = 1280
 STATE_GET_FRAME = 0
 STATE_TRANSITION = 1
-TRANSITION_TIME = 3.0
+TRANSITION_TIME = 0.5
 FLAG_CONTRAST = 1 << 0
 FLAG_SATURATION = 1 << 1
-FLAG_BLEND = 1 << 2
+ACCUM_ALPHA = 64
 
 _num_frames = 0
 _images = []
@@ -31,6 +31,112 @@ _last_transition_time = 0
 _previous_frame = None
 _transition_state = STATE_GET_FRAME
 _transition_time = None
+
+
+_objects = []
+_accum_reds = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
+_accum_greens = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
+_accum_blues = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
+_accum_counts = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
+
+
+def _color_moments(image):
+
+    s = ImageStat.Stat(image)
+
+    red_accum = 0
+    green_accum = 0
+    blue_accum = 0
+
+    im_pixels = image.load()
+
+    npixels = image.size[0] * image.size[1]
+
+    for x in range(image.size[0]):
+        for y in range(image.size[1]):
+            red_accum += (im_pixels[x,y][0] - s.mean[0]) ** 3
+            green_accum += (im_pixels[x,y][1] - s.mean[1]) ** 3
+            blue_accum += (im_pixels[x,y][2] - s.mean[2]) ** 3
+
+    skewness = [
+        (red_accum / npixels) ** (1. / 3),
+        (green_accum / npixels) ** (1. / 3),
+        (blue_accum / npixels) ** (1. / 3)
+    ]
+
+    return [s.mean, s.stddev, skewness]
+
+
+def _score(moments_1, moments_2, weights):
+    score = 0
+    for channel in range(3):        # R, G, B
+        score += weights[0][channel] * abs((moments_1[0][channel] - moments_2[0][channel]))
+        score += weights[1][channel] * abs((moments_1[1][channel] - moments_2[1][channel]))
+        score += weights[2][channel] * abs((moments_1[2][channel] - moments_2[2][channel]))
+    return score
+
+
+def _place_image(canvas, image):
+    """
+    Returns the x and y co-ordinate the "image" should be placed at on the
+    "canvas".
+    """
+    global _objects
+
+    moments = _color_moments(image)
+
+    if len(_objects) == 0:
+        x_val = int((canvas.size[0] - image.size[0]) / 2)
+        y_val = int((canvas.size[1] - image.size[1]) / 2)
+    else:
+
+        highest_score = 0
+        winning_obj = None
+
+        for o in _objects:
+            score = _score(moments, o['m'], [[1, 1, 1], [1, 1, 1], [1, 1, 1]])
+            if score > highest_score:
+                winning_obj = o
+                highest_score = score
+
+        # Choose a random side of the winning object to place the new image.
+        side = random.randint(0, 4)
+        if side == 0:   # top
+            logging.info('top')
+            x_val = winning_obj['x']
+            y_val = winning_obj['y'] - image.size[1]
+        elif side == 1: # right
+            logging.info('right')
+            x_val = winning_obj['x'] + winning_obj['w']
+            y_val = winning_obj['y']
+        elif side == 2: # bottom
+            logging.info('bottom')
+            x_val = winning_obj['x']
+            y_val = winning_obj['y'] + winning_obj['h']
+        else:           # left
+            logging.info('left')
+            x_val = winning_obj['x'] - image.size[0]
+            y_val = winning_obj['y']
+
+        if x_val < 0:
+            x_val = 0
+        if x_val + image.size[0] > canvas.size[0]:
+            x_val = canvas.size[0] - image.size[0]
+        if y_val < 0:
+            y_val = 0
+        if y_val + image.size[1] > canvas.size[1]:
+            y_val = canvas.size[1] - image.size[1]
+
+    _objects.append({
+        'i' : image,
+        'x' : x_val,
+        'y' : y_val,
+        'w' : image.size[0],
+        'h' : image.size[1],
+        'm' : moments
+    })
+
+    return x_val, y_val
 
 
 def _find_images():
@@ -45,8 +151,8 @@ def _load_image():
     """ Load the image in the specified slot, process it, and update the
     output surface.
     """
-
     global _canvas, _num_frames, _flags
+    global _accum_reds, _accum_greens, _accum_blues, _accum_counts
 
     #image_idx = random.randint(0, len(_images) - 1)
     image_idx = _num_frames % len(_images)
@@ -76,17 +182,32 @@ def _load_image():
         logging.info('resizing image to %dx%d', new_width, new_height)
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
-    x_val = int((_canvas.size[0] - image.size[0]) / 2)
-    y_val = int((_canvas.size[1] - image.size[1]) / 2)
+    x_val, y_val = _place_image(_canvas, image)
 
-    if _flags & FLAG_BLEND:
-        alpha = 0.64
-        copy_of_canvas = _canvas.copy()
-        _canvas.paste(image, (x_val, y_val), image)
-        _canvas = Image.blend(_canvas, copy_of_canvas, alpha)
-    else:
-        image.putalpha(150)
-        _canvas.paste(image, (x_val, y_val), image)
+    # Blend the image into the canvas.
+    im_pixels = image.load()
+    canvas_pixels = _canvas.load()
+
+    for x in range(image.size[0]):
+        for y in range(image.size[1]):
+
+            idx = _canvas.size[0] * (y + y_val) + (x + x_val)
+
+            count = _accum_counts[idx] = _accum_counts[idx] + 1
+            red = _accum_reds[idx] = _accum_reds[idx] + im_pixels[x, y][0]
+            green = _accum_greens[idx] = _accum_greens[idx] + im_pixels[x, y][1]
+            blue = _accum_blues[idx] = _accum_blues[idx] + im_pixels[x, y][2]
+
+            red = min(int(red / count), 255)
+            green = min(int(green / count), 255)
+            blue = min(int(blue / count), 255)
+
+            canvas_pixels[x+x_val, y+y_val] = (
+                red,
+                green,
+                blue,
+                ACCUM_ALPHA
+            )
 
     _generate_frame()
 
@@ -232,9 +353,6 @@ def _main():
                     _flags = _flags ^ FLAG_SATURATION
                     logging.info('flags is %X', _flags)
                     _generate_frame()
-                elif event.key == pygame.K_f:
-                    _flags = _flags ^ FLAG_BLEND
-                    logging.info('flags is %X', _flags)
 
         # Update the display.
         _on_frame(screen)
