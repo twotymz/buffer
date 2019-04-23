@@ -9,15 +9,15 @@ IMAGE_DIR = r'./images2'
 CANVAS_HEIGHT = 960
 CANVAS_WIDTH = 1280
 
-accum_reds = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
-accum_greens = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
-accum_blues = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
-accum_counts = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
+max_red = [0] * CANVAS_WIDTH * CANVAS_HEIGHT
+max_green = [0] * CANVAS_WIDTH * CANVAS_HEIGHT
+max_blue = [0] * CANVAS_WIDTH * CANVAS_HEIGHT
+max_counts = [0] * CANVAS_WIDTH * CANVAS_HEIGHT
 
 
 def _load_image(canvas, image_path):
 
-    global accum_reds, accum_greens, accum_blues, accum_counts
+    global max_red, max_green, max_blue, max_counts
 
     try:
         image = Image.open(image_path).convert('RGBA')
@@ -25,10 +25,8 @@ def _load_image(canvas, image_path):
         print('failed opening %s', _images[image_idx])
         return
 
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(2.0)
-    enhancer = ImageEnhance.Color(image)
-    image = enhancer.enhance(2.0)
+    image = ImageEnhance.Contrast(image).enhance(2.0)
+    image = ImageEnhance.Color(image).enhance(2.0)
 
     # Resize the image if need be.
     new_width = None
@@ -47,33 +45,29 @@ def _load_image(canvas, image_path):
             new_height = image.size[1]
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
-    x_val = int((canvas.size[0] - image.size[0]) / 2)
-    y_val = int((canvas.size[1] - image.size[1]) / 2)
-
-    width, height = image.size
+    x1 = int((canvas.size[0] - image.size[0]) / 2)
+    y1 = int((canvas.size[1] - image.size[1]) / 2)
 
     im_pixels = image.load()
     canvas_pixels = canvas.load()
 
-    for x in range(width):
-        for y in range(height):
+    for y in range(image.size[1]):
+        for x in range(image.size[0]):
+            canvas_idx = canvas.size[0] * (y + y1) + (x + x1)
+            max_counts[canvas_idx] += 1
+            max_red[canvas_idx] = min(int((im_pixels[x, y][0] + max_red[canvas_idx]) / max_counts[canvas_idx]), 255)
+            max_green[canvas_idx] = min(int((im_pixels[x, y][1] + max_green[canvas_idx]) / max_counts[canvas_idx]), 255)
+            max_blue[canvas_idx] = min(int((im_pixels[x, y][2] + max_blue[canvas_idx]) / max_counts[canvas_idx]), 255)
 
-            idx = canvas.size[0] * (y + y_val) + (x + x_val)
-
-            count = accum_counts[idx] = accum_counts[idx] + 1
-            red = accum_reds[idx] = accum_reds[idx] + im_pixels[x, y][0]
-            green = accum_greens[idx] = accum_greens[idx] + im_pixels[x, y][1]
-            blue = accum_blues[idx] = accum_blues[idx] + im_pixels[x, y][2]
-
-            red = min(int(red / count), 255)
-            green = min(int(green / count), 255)
-            blue = min(int(blue / count), 255)
-
-            canvas_pixels[x+x_val, y+y_val] = (
-                red,
-                green,
-                blue,
-                64
+    for canvas_idx in range(canvas.size[0] * canvas.size[1]):
+        if max_counts[canvas_idx] > 0:
+            y = int(canvas_idx / canvas.size[0])
+            x = canvas_idx - canvas.size[0] * y
+            canvas_pixels[x, y] = (
+                min(int((canvas_pixels[x, y][0] + max_red[canvas_idx]) / 2), 255),             # Current pixel value plus max divided by alpha amount
+                min(int((canvas_pixels[x, y][1] + max_green[canvas_idx]) / 2), 255),
+                min(int((canvas_pixels[x, y][2] + max_blue[canvas_idx]) / 2), 255),
+                255
             )
 
 
@@ -91,13 +85,13 @@ if __name__ == '__main__':
         end = timer()
         total_secs += end - start
         total_calls += 1
-        canvas.show()
 
+    canvas.show()
 
     print('Avg time in _load_image() is {}'.format(
         total_secs / total_calls
     ))
 
-    print('Shallowest coverage is {}'.format(min(accum_counts)))
-    print('Deepest coverage is {}'.format(max(accum_counts)))
-    print('Average coverage is {}'.format(sum(accum_counts) / len(accum_counts)))
+    print('Shallowest coverage is {}'.format(min(max_counts)))
+    print('Deepest coverage is {}'.format(max(max_counts)))
+    print('Average coverage is {}'.format(sum(max_counts) / len(max_counts)))

@@ -9,17 +9,16 @@ import os
 import os.path
 
 IMAGE_DIR = r'.\images2'
-BACKGROUND = (20, 20, 20)
-DISPLAY_HEIGHT = 960
-DISPLAY_WIDTH = 1280
-CANVAS_HEIGHT = 960
+BACKGROUND = (0, 0, 0)
+DISPLAY_WIDTH = 640
+DISPLAY_HEIGHT = 480
 CANVAS_WIDTH = 1280
+CANVAS_HEIGHT = 960
 STATE_GET_FRAME = 0
 STATE_TRANSITION = 1
 TRANSITION_TIME = 0.5
 FLAG_CONTRAST = 1 << 0
 FLAG_SATURATION = 1 << 1
-ACCUM_ALPHA = 64
 
 _num_frames = 0
 _images = []
@@ -34,10 +33,10 @@ _transition_time = None
 
 
 _objects = []
-_accum_reds = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
-_accum_greens = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
-_accum_blues = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
-_accum_counts = [0] * CANVAS_HEIGHT * CANVAS_WIDTH
+_max_red = [0] * CANVAS_WIDTH * CANVAS_HEIGHT
+_max_green = [0] * CANVAS_WIDTH * CANVAS_HEIGHT
+_max_blue = [0] * CANVAS_WIDTH * CANVAS_HEIGHT
+_max_counts = [0] * CANVAS_WIDTH * CANVAS_HEIGHT
 
 
 def _color_moments(image):
@@ -152,9 +151,8 @@ def _load_image():
     output surface.
     """
     global _canvas, _num_frames, _flags
-    global _accum_reds, _accum_greens, _accum_blues, _accum_counts
+    global _max_red, _max_green, _max_blue, _max_counts
 
-    #image_idx = random.randint(0, len(_images) - 1)
     image_idx = _num_frames % len(_images)
     logging.info('loading image %s', _images[image_idx])
 
@@ -182,31 +180,28 @@ def _load_image():
         logging.info('resizing image to %dx%d', new_width, new_height)
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
-    x_val, y_val = _place_image(_canvas, image)
+    x1, y1 = _place_image(_canvas, image)
 
-    # Blend the image into the canvas.
     im_pixels = image.load()
     canvas_pixels = _canvas.load()
 
-    for x in range(image.size[0]):
-        for y in range(image.size[1]):
+    for y in range(image.size[1]):
+        for x in range(image.size[0]):
+            canvas_idx = _canvas.size[0] * (y + y1) + (x + x1)
+            _max_counts[canvas_idx] += 1
+            _max_red[canvas_idx] = min(int((im_pixels[x, y][0] + _max_red[canvas_idx]) / _max_counts[canvas_idx]), 255)
+            _max_green[canvas_idx] = min(int((im_pixels[x, y][1] + _max_green[canvas_idx]) / _max_counts[canvas_idx]), 255)
+            _max_blue[canvas_idx] = min(int((im_pixels[x, y][2] + _max_blue[canvas_idx]) / _max_counts[canvas_idx]), 255)
 
-            idx = _canvas.size[0] * (y + y_val) + (x + x_val)
-
-            count = _accum_counts[idx] = _accum_counts[idx] + 1
-            red = _accum_reds[idx] = _accum_reds[idx] + im_pixels[x, y][0]
-            green = _accum_greens[idx] = _accum_greens[idx] + im_pixels[x, y][1]
-            blue = _accum_blues[idx] = _accum_blues[idx] + im_pixels[x, y][2]
-
-            red = min(int(red / count), 255)
-            green = min(int(green / count), 255)
-            blue = min(int(blue / count), 255)
-
-            canvas_pixels[x+x_val, y+y_val] = (
-                red,
-                green,
-                blue,
-                ACCUM_ALPHA
+    for canvas_idx in range(_canvas.size[0] * _canvas.size[1]):
+        if _max_counts[canvas_idx] > 0:
+            y = int(canvas_idx / _canvas.size[0])
+            x = canvas_idx - _canvas.size[0] * y
+            canvas_pixels[x, y] = (
+                min(int((canvas_pixels[x, y][0] + _max_red[canvas_idx]) / 2), 255),             # Current pixel value plus max divided by alpha amount
+                min(int((canvas_pixels[x, y][1] + _max_green[canvas_idx]) / 2), 255),
+                min(int((canvas_pixels[x, y][2] + _max_blue[canvas_idx]) / 2), 255),
+                255
             )
 
     _generate_frame()
