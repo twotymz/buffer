@@ -1,6 +1,6 @@
 
 import PIL
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageChops
 import os
 import os.path
 from timeit import default_timer as timer
@@ -50,6 +50,11 @@ def _load_image(canvas, image_path):
     x_val = int((canvas.size[0] - image.size[0]) / 2)
     y_val = int((canvas.size[1] - image.size[1]) / 2)
 
+    cropped_image = canvas.crop((x_val, y_val, x_val + image.size[0], y_val + image.size[1]))
+    blended_image = ImageChops.blend(image, cropped_image, 64 / 255.0)
+    canvas.paste(blended_image, (x_val, y_val, x_val + image.size[0], y_val + image.size[1]))
+
+    '''
     width, height = image.size
 
     im_pixels = image.load()
@@ -75,6 +80,7 @@ def _load_image(canvas, image_path):
                 blue,
                 64
             )
+    '''
 
 
 if __name__ == '__main__':
@@ -91,8 +97,8 @@ if __name__ == '__main__':
         end = timer()
         total_secs += end - start
         total_calls += 1
-        canvas.show()
 
+    canvas.show()
 
     print('Avg time in _load_image() is {}'.format(
         total_secs / total_calls

@@ -1,7 +1,7 @@
 import logging
 import math
 import PIL
-from PIL import Image, ImageEnhance, ImageStat
+from PIL import Image, ImageEnhance, ImageStat, ImageChops
 import pygame
 import time
 import random
@@ -54,14 +54,14 @@ def _color_moments(image):
 
     for x in range(image.size[0]):
         for y in range(image.size[1]):
-            red_accum += (im_pixels[x,y][0] - s.mean[0]) ** 3
-            green_accum += (im_pixels[x,y][1] - s.mean[1]) ** 3
-            blue_accum += (im_pixels[x,y][2] - s.mean[2]) ** 3
+            red_accum   += abs(im_pixels[x,y][0] - s.mean[0]) ** 3          # don't know about the abs here
+            green_accum += abs(im_pixels[x,y][1] - s.mean[1]) ** 3
+            blue_accum  += abs(im_pixels[x,y][2] - s.mean[2]) ** 3
 
     skewness = [
-        (red_accum / npixels) ** (1. / 3),
-        (green_accum / npixels) ** (1. / 3),
-        (blue_accum / npixels) ** (1. / 3)
+        int((red_accum / npixels)) ** (1. / 3),
+        int((green_accum / npixels)) ** (1. / 3),
+        int((blue_accum / npixels)) ** (1. / 3)
     ]
 
     return [s.mean, s.stddev, skewness]
@@ -133,25 +133,37 @@ def _place_image(canvas, image):
         'y' : y_val,
         'w' : image.size[0],
         'h' : image.size[1],
-        'm' : moments
+        'r' : x_val + image.size[0],
+        'b' : y_val + image.size[1],
+        'm' : moments,
+        'a' : ACCUM_ALPHA
     })
 
-    return x_val, y_val
+    return _objects[-1], x_val, y_val
 
 
 def _find_images():
     global _images
     for filename in os.listdir(IMAGE_DIR):
         name, ext = os.path.splitext(filename)
-        if ext == '.jpg':
+        if ext == '.jpg' or ext == '.png':
             _images.append(os.path.join(IMAGE_DIR, filename))
+
+
+def _blend(obj):
+    global _canvas
+    if obj['a'] + ACCUM_ALPHA < 255:
+        cropped_image = _canvas.crop((obj['x'], obj['y'], obj['r'] , obj['b']))
+        blended_image = ImageChops.blend(obj['i'], cropped_image, obj['a'] / 255.0)
+        _canvas.paste(blended_image, (obj['x'], obj['y'], obj['r'], obj['b']))
+        obj['a'] += ACCUM_ALPHA
 
 
 def _load_image():
     """ Load the image in the specified slot, process it, and update the
     output surface.
     """
-    global _canvas, _num_frames, _flags
+    global _canvas, _num_frames, _flags, _objects
     global _accum_reds, _accum_greens, _accum_blues, _accum_counts
 
     #image_idx = random.randint(0, len(_images) - 1)
@@ -182,9 +194,11 @@ def _load_image():
         logging.info('resizing image to %dx%d', new_width, new_height)
         image.thumbnail((new_width, new_height), PIL.Image.ANTIALIAS)
 
-    x_val, y_val = _place_image(_canvas, image)
+    obj, x_val, y_val = _place_image(_canvas, image)
+    for o in _objects[::-1]:
+        _blend(o)
 
-    # Blend the image into the canvas.
+    '''
     im_pixels = image.load()
     canvas_pixels = _canvas.load()
 
@@ -208,6 +222,7 @@ def _load_image():
                 blue,
                 ACCUM_ALPHA
             )
+    '''
 
     _generate_frame()
 
