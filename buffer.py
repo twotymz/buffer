@@ -314,7 +314,7 @@ def _main():
 
     pygame.init()
     clock = pygame.time.Clock()
-    pygame.display.set_caption('bufer v0')
+    pygame.display.set_caption('buffer v0')
     screen = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT), 0)
     screen.fill(BACKGROUND)
 
